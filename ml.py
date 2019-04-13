@@ -1,4 +1,5 @@
 # %%
+from sklearn.compose import ColumnTransformer
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.gaussian_process.kernels import RBF
@@ -54,6 +55,8 @@ def fix_time(time):
 # %%
 df["DateIssued"] = df["DateIssued"].apply(lambda x: x[:10] if int(x[:2]) <= 21 else np.nan)
 df["TimeIssued"] = df["TimeIssued"].apply(fix_time)
+df["DateIssued"] = pd.to_datetime(df["DateIssued"])
+df["DayIssued"] = df["DateIssued"].dt.weekday_name
 df.head()
 
 # %%
@@ -69,13 +72,14 @@ gmap.draw("my_map.html")
 
 # %%
 # X = df.iloc[:, [1, 2, 3, 5, 6]]
-X = df.iloc[:, [3, 5, 6]]  # don't look at date or time right now (interesting strategy, I know).
+df.head()
+X = df.iloc[:, [3, 5, 6, 7]]
 y = df.iloc[:, 4]
-new_vio = LabelEncoder().fit(X["ViolationDescription"]).transform(X["ViolationDescription"])
-new_appeal = LabelEncoder().fit(y).transform(y)
-X["ViolationDescription"] = new_vio
-y = new_appeal
-X = StandardScaler().fit(X).transform(X)
+x_pipe = ColumnTransformer([
+    ("numerical_vals", StandardScaler(), ["latitude", "longitude"]),
+    ("categorical_values", OneHotEncoder(), ["ViolationDescription", "DayIssued"])
+])
+X = x_pipe.fit_transform(X)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2, random_state=42)
 
 
@@ -88,7 +92,7 @@ dict_classifiers = {
     "Decision Tree": tree.DecisionTreeClassifier(),
     "Random Forest": RandomForestClassifier(n_estimators=1000),
     "Neural Net": MLPClassifier(alpha=1),
-    "Naive Bayes": GaussianNB()
+    # "Naive Bayes": GaussianNB()
 }
 # %%
 
@@ -140,24 +144,9 @@ def display_dict_models(dict_models, sort_by='test_score'):
 
 
 # %%
-dict_models = batch_classify(X_train, y_train, X_test, y_test, no_classifiers=8)
+dict_models = batch_classify(X_train, y_train, X_test, y_test, no_classifiers=7)
 display_dict_models(dict_models)
 
-# %%
-svm_clf = LinearSVC(C=1, loss="hinge", random_state=42, max_iter=1000)
-svm_clf.fit(X_train, y_train)
-
-
-def test_svm(svm, X_test, y_test):
-    predictions = svm.predict(X_test)
-    acc = accuracy_score(y_test, predictions)
-    precision = precision_score(y_test, predictions)
-    recall = recall_score(y_test, predictions)
-    f1 = f1_score(y_test, predictions)
-    print(f"Accuracy:{acc}\nPrecision:{precision}\nRecall:{recall}\nF1 Score:{f1}")
-
-
-test_svm(svm_clf, X_test, y_test)
 
 # %%
 # awesome code for modeling http://ataspinar.com/2017/05/26/classification-with-scikit-learn/
