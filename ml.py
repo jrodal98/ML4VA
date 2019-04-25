@@ -32,46 +32,13 @@ from sklearn.preprocessing import StandardScaler
 from config import api_key
 from gmplot import gmplot
 %matplotlib inline
-
 # %%
-df = pd.read_csv("ticket_data.csv")
-df.dropna(inplace=True)
+df = pd.read_csv("cleaned_data.csv")
 df.head()
-
-# %%
-
-
-def fix_time(time):
-    time = str(time).strip().replace(".", "")
-    if len(time) == 1:
-        time = "0" + time
-    if ":" not in time:
-        if (len(time)) == 5:
-            time = time[:-1]
-        time = time[:-2] + ":" + time[-2:]
-    return f"{'0' * max(5-len(time),0)}{time}:00"
-
-
-# %%
-df["DateIssued"] = df["DateIssued"].apply(lambda x: x[:10] if int(x[:2]) <= 21 else np.nan)
-df["TimeIssued"] = df["TimeIssued"].apply(fix_time)
-df["DateIssued"] = pd.to_datetime(df["DateIssued"])
-df["DayIssued"] = df["DateIssued"].dt.weekday_name
-df.head()
-
-# %%
-df = df.where((df["latitude"] < 38.4) & (df["AppealStatus"] != "pending"))
-df.dropna(inplace=True)
-
-# %%
-gmap = gmplot.GoogleMapPlotter(df["latitude"].mean(), df["longitude"].mean(), 14)
-gmap.apikey = api_key
-# gmap.scatter(df["latitude"], df["longitude"], '#FF0000', size=10, marker=False)
-gmap.heatmap(df["latitude"], df["longitude"])
-gmap.draw("my_map.html")
 
 # %%
 # X = df.iloc[:, [1, 2, 3, 5, 6]]
+df["ViolationDescription"].value_counts()
 df.head()
 X = df.iloc[:, [3, 5, 6, 7]]
 y = df.iloc[:, 4]
@@ -80,6 +47,7 @@ x_pipe = ColumnTransformer([
     ("categorical_values", OneHotEncoder(), ["ViolationDescription", "DayIssued"])
 ])
 X = x_pipe.fit_transform(X)
+gps_scaler = StandardScaler()
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2, random_state=42)
 
 
@@ -111,9 +79,9 @@ def batch_classify(X_train, Y_train, X_test, Y_test, no_classifiers=5, verbose=T
 
     dict_models = {}
     for classifier_name, classifier in list(dict_classifiers.items())[:no_classifiers]:
-        t_start = time.clock()
+        t_start = time.process_time()
         classifier.fit(X_train, Y_train)
-        t_end = time.clock()
+        t_end = time.process_time()
 
         t_diff = t_end - t_start
         train_score = classifier.score(X_train, Y_train)
@@ -133,7 +101,7 @@ def display_dict_models(dict_models, sort_by='test_score'):
     training_t = [dict_models[key]['train_time'] for key in cls]
 
     df_ = pd.DataFrame(data=np.zeros(shape=(len(cls), 4)), columns=[
-                       'classifier', 'train_score', 'test_score', 'train_time'])
+        'classifier', 'train_score', 'test_score', 'train_time'])
     for ii in range(0, len(cls)):
         df_.loc[ii, 'classifier'] = cls[ii]
         df_.loc[ii, 'train_score'] = training_s[ii]
@@ -149,4 +117,33 @@ display_dict_models(dict_models)
 
 
 # %%
+df["AppealStatus"].value_counts()
+gmap.apikey = api_key
+# gmap.scatter(df["latitude"], df["longitude"], '#FF0000', size=10, marker=False)
+gmap.heatmap(df["latitude"], df["longitude"])
+gmap.draw("my_map.html")
 # awesome code for modeling http://ataspinar.com/2017/05/26/classification-with-scikit-learn/
+
+
+# %%
+gps_scaler = StandardScaler()
+gps_data = gps_scaler.fit_transform(df.iloc[:, [5, 6]])
+gps_data
+k_m = K_means(gps_data)
+centroids = k_m.cluster(8)
+df["Cluster"] = k_m.closest
+
+# %%
+df.plot(kind="scatter", x="longitude", y="latitude",
+        c="Cluster", cmap=plt.get_cmap("jet"), colorbar=False, figsize=(30, 30), alpha=.4)
+# %%
+gmap = gmplot.GoogleMapPlotter(df["latitude"].mean(), df["longitude"].mean(), 14)
+gmap.apikey = api_key
+# gmap.scatter(df["latitude"], df["longitude"], '#FF0000', size=10, marker=False)
+colors = ["000000", "F0F8FF", "0000FF", "FF0000", "FF8C00", "006400", "FF00FF", "FFD700"]
+for i, color in enumerate(colors):
+    sub_df = df.where(df["Cluster"] == i).dropna()
+    gmap.scatter(sub_df["latitude"], sub_df["longitude"], color, size=10, marker=False)
+
+gmap.draw("my_map.html")
+# gmap.html_color_codes
