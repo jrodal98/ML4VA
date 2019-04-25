@@ -42,7 +42,6 @@ df["ViolationDescription"].value_counts()
 df.head()
 X = df.iloc[:, [3, 5, 6, 7]]
 y = df.iloc[:, 4].apply(lambda x: 1 if x == "granted" else 0)
-y
 x_pipe = ColumnTransformer([
     ("numerical_vals", StandardScaler(), ["latitude", "longitude"]),
     ("categorical_values", OneHotEncoder(), ["ViolationDescription", "DayIssued"])
@@ -118,7 +117,20 @@ dict_models = batch_classify(X_train, y_train, X_test, y_test, no_classifiers=7)
 display_dict_models(dict_models)
 # %%
 # HYPERTUNING SVM
-scoring_metrics = ["accuracy", "precision", "recall", "f1"]
+
+
+def plot_metric(metric, label, i, dolog=False):
+    plt.subplot(2, 2, i)
+    if dolog:
+        plt.plot(np.log(c_values), metric)
+        plt.xlabel("log(C)")
+    else:
+        plt.plot(c_values, metric)
+        plt.xlabel("C")
+    plt.title(f"{label} as a function of C")
+    plt.ylabel("Score")
+
+# %%
 
 
 def test_clfs(c):
@@ -131,6 +143,82 @@ def test_clfs(c):
 c_values = [.001, .01, .1, 1, 10, 100, 1000]
 results = [test_clfs(c) for c in c_values]
 accuracies, precisions, recalls, f1s = zip(*results)
+# %%
+fig = plt.figure(figsize=(10, 10))
+plot_metric(accuracies, "Accuracy", 1, True)
+plot_metric(precisions, "Precision", 2, True)
+plot_metric(recalls, "Recall", 3, True)
+plot_metric(f1s, "F1-Score", 4, True)
+plt.savefig("images/linear_svm.png")
+
+scoring_metrics = ["accuracy", "precision", "recall", "f1"]
+# %%
+best_acc = max(accuracies)
+ind = accuracies.index(best_acc)
+best_c = c_values[5]
+print(best_c)
+# %%
+params_grid = {'C': [0.001, 0.01, 0.1, 1, 10, 100],
+               'gamma': [0.0001, 0.001, 0.01, 0.1]}
+
+grid_search = GridSearchCV(SVC(kernel="rbf"), params_grid,
+                           scoring=scoring_metrics, refit=False, return_train_score=False)
+
+grid_search.fit(X_train, y_train)
+accuracies = list(grid_search.cv_results_["mean_test_accuracy"])
+precisions = list(grid_search.cv_results_["mean_test_precision"])
+recalls = list(grid_search.cv_results_["mean_test_recall"])
+f1s = list(grid_search.cv_results_["mean_test_f1"])
+nonlinear_c_values = list(grid_search.cv_results_["param_C"])
+gamma_values = list(grid_search.cv_results_["param_gamma"])
+# %%
+
+
+def plot_3d_metric(ax, metric, label):
+    ax.scatter(np.log(nonlinear_c_values), np.log(gamma_values), metric)
+    ax.set_xlabel("log(C)")
+    ax.set_ylabel("log(gamma)")
+    ax.set_zlabel("Score")
+    ax.set_title(f"{label} as a function of C and gamma")
+
+
+fig = plt.figure(figsize=(12, 12))
+metrics = ["Accuracy", "Precision", "Recall", "F1-Score"]
+scores = (accuracies, precisions, recalls, f1s)
+
+for i in range(1, 5):
+    ax = fig.add_subplot(220 + i, projection='3d')
+    plot_3d_metric(ax, scores[i-1], metrics[i-1])
+plt.savefig("images/nonlinear_svm_hypertuning.png")
+# %%
+x = (accuracies, precisions, recalls, f1s, nonlinear_c_values, gamma_values)
+categories = list(zip(*x))
+categories.sort(key=lambda tup: (-tup[2]))
+print(*categories[:10], sep="\n")
+for i in categories:
+    print(i)
+    print("-------------------")
+best_category = categories[5]
+best_nonlinear_c = best_category[-2]
+best_gamma = best_category[-1]
+print(best_nonlinear_c, best_gamma)
+# %%
+non_linear_clf = SVC(C=.01, gamma=.1, kernel="rbf")
+non_linear_clf.fit(X_train, y_train)
+# %%
+
+
+def test_svm(svm, X_test, y_test):
+    predictions = svm.predict(X_test)
+    acc = accuracy_score(y_test, predictions)
+    precision = precision_score(y_test, predictions)
+    recall = recall_score(y_test, predictions)
+    f1 = f1_score(y_test, predictions)
+    print(f"Accuracy:{acc}\nPrecision:{precision}\nRecall:{recall}\nF1 Score:{f1}")
+
+
+test_svm(non_linear_clf, X_test, y_test)
+
 
 # %%
 gps_scaler = StandardScaler()
