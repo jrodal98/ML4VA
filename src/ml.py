@@ -29,9 +29,9 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from config import api_key
-from gmplot import gmplot
 from src import config
+from gmplot import gmplot
+from src import k_means
 %matplotlib inline
 # %%
 df = pd.read_csv("data/cleaned_data.csv")
@@ -41,7 +41,8 @@ df = pd.read_csv("data/cleaned_data.csv")
 df["ViolationDescription"].value_counts()
 df.head()
 X = df.iloc[:, [3, 5, 6, 7]]
-y = df.iloc[:, 4]
+y = df.iloc[:, 4].apply(lambda x: 1 if x == "granted" else 0)
+y
 x_pipe = ColumnTransformer([
     ("numerical_vals", StandardScaler(), ["latitude", "longitude"]),
     ("categorical_values", OneHotEncoder(), ["ViolationDescription", "DayIssued"])
@@ -112,59 +113,24 @@ def display_dict_models(dict_models, sort_by='test_score'):
 
 
 # %%
+# awesome code for modeling http://ataspinar.com/2017/05/26/classification-with-scikit-learn/
 dict_models = batch_classify(X_train, y_train, X_test, y_test, no_classifiers=7)
 display_dict_models(dict_models)
-
-
 # %%
+# HYPERTUNING SVM
+scoring_metrics = ["accuracy", "precision", "recall", "f1"]
 
 
-def dist(v1, v2):
-    return (((v1 - v2)**2).sum(axis=2))**.5
+def test_clfs(c):
+    svm_clf = LinearSVC(C=c, loss="hinge", random_state=42, max_iter=1000)
+    scores = cross_validate(svm_clf, X_train, y_train,
+                            scoring=scoring_metrics, cv=3, return_train_score=False)
+    return (np.mean(scores["test_accuracy"]), np.mean(scores["test_precision"]), np.mean(scores["test_recall"]), np.mean(scores["test_f1"]))
 
 
-class K_means:
-    def __init__(self, values):
-        self.values = values
-        self.k = 0
-        self.closest = None
-        self.centroids = None
-
-    def cluster(self, k):
-        self.k = k
-        centroids = np.random.permutation(self.values)[:k]  # Initialize centroid
-        closest = np.empty(self.values.shape[0])  # Initialize the closest array
-        previous_closest = None  # keep track of the previous closest array
-        while not all(previous_closest == closest):  # while classes are still changing
-            previous_closest = closest
-            # populate an array with the closest centroid for each row in values
-            closest = np.argmin(dist(self.values, centroids[:, np.newaxis]), axis=0)
-            # new centroids are the mean point of the values assigned to that centroid
-            centroids = np.array([self.values[closest == clust].mean(axis=0)
-                                  for clust in range(centroids.shape[0])])
-        self.centroids = centroids
-        self.closest = closest
-        return centroids
-
-    def get_cluster_sds(self):
-        return np.array([self.values[self.closest == clust].std(axis=0)
-                         for clust in range(self.centroids.shape[0])])
-
-    def squared_err(self):
-        return np.array([(self.values[self.closest == clust]**2).sum(axis=0) - self.values[self.closest == clust].shape[0] * self.centroids[clust]**2 for clust in range(self.centroids.shape[0])])
-
-    def get_clusters(self):
-        return [self.values[self.closest == clust] for clust in range(self.centroids.shape[0])]
-
-
-# %%
-df["AppealStatus"].value_counts()
-gmap.apikey = api_key
-# gmap.scatter(df["latitude"], df["longitude"], '#FF0000', size=10, marker=False)
-gmap.heatmap(df["latitude"], df["longitude"])
-gmap.draw("my_map.html")
-# awesome code for modeling http://ataspinar.com/2017/05/26/classification-with-scikit-learn/
-
+c_values = [.001, .01, .1, 1, 10, 100, 1000]
+results = [test_clfs(c) for c in c_values]
+accuracies, precisions, recalls, f1s = zip(*results)
 
 # %%
 gps_scaler = StandardScaler()
