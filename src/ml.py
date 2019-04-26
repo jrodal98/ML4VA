@@ -40,10 +40,10 @@ df = pd.read_csv("data/cleaned_data.csv")
 # X = df.iloc[:, [1, 2, 3, 5, 6]]
 df["ViolationDescription"].value_counts()
 df.head()
-X = df.iloc[:, [3, 5, 6, 7]]
+X = df.iloc[:, [3, 5, 6, 7, 8]]
 y = df.iloc[:, 4].apply(lambda x: 1 if x == "granted" else 0)
 x_pipe = ColumnTransformer([
-    ("numerical_vals", StandardScaler(), ["latitude", "longitude"]),
+    ("numerical_vals", StandardScaler(), ["latitude", "longitude", "Hour"]),
     ("categorical_values", OneHotEncoder(), ["ViolationDescription", "DayIssued"])
 ])
 X = x_pipe.fit_transform(X)
@@ -53,13 +53,14 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2, random_s
 
 # %%
 dict_classifiers = {
-    "Logistic Regression": LogisticRegression(),
-    "Nearest Neighbors": KNeighborsClassifier(),
+    # "Logistic Regression": LogisticRegression(),
+    # "Nearest Neighbors": KNeighborsClassifier(),
     "Linear SVM": SVC(),
-    "Gradient Boosting Classifier": GradientBoostingClassifier(n_estimators=1000),
-    "Decision Tree": tree.DecisionTreeClassifier(),
-    "Random Forest": RandomForestClassifier(n_estimators=1000),
-    "Neural Net": MLPClassifier(alpha=1),
+    "Non-Linear SVM": SVC(C=.01, gamma=.1, kernel="rbf"),
+    # "Gradient Boosting Classifier": GradientBoostingClassifier(n_estimators=1000),
+    # "Decision Tree": tree.DecisionTreeClassifier(),
+    "Random Forest": RandomForestClassifier(n_estimators=800, min_samples_split=10, min_samples_leaf=4, max_features="sqrt", max_depth=50, bootstrap=True),
+    # "Neural Net": MLPClassifier(alpha=1),
     # "Naive Bayes": GaussianNB()
 }
 # %%
@@ -113,7 +114,7 @@ def display_dict_models(dict_models, sort_by='test_score'):
 
 # %%
 # awesome code for modeling http://ataspinar.com/2017/05/26/classification-with-scikit-learn/
-dict_models = batch_classify(X_train, y_train, X_test, y_test, no_classifiers=7)
+dict_models = batch_classify(X_train, y_train, X_test, y_test, no_classifiers=3)
 display_dict_models(dict_models)
 # %%
 # HYPERTUNING SVM
@@ -133,6 +134,9 @@ def plot_metric(metric, label, i, dolog=False):
 # %%
 
 
+scoring_metrics = ["accuracy", "precision", "recall", "f1"]
+
+
 def test_clfs(c):
     svm_clf = LinearSVC(C=c, loss="hinge", random_state=42, max_iter=1000)
     scores = cross_validate(svm_clf, X_train, y_train,
@@ -149,9 +153,9 @@ plot_metric(accuracies, "Accuracy", 1, True)
 plot_metric(precisions, "Precision", 2, True)
 plot_metric(recalls, "Recall", 3, True)
 plot_metric(f1s, "F1-Score", 4, True)
-plt.savefig("images/linear_svm.png")
+# plt.savefig("images/linear_svm.png")
 
-scoring_metrics = ["accuracy", "precision", "recall", "f1"]
+
 # %%
 best_acc = max(accuracies)
 ind = accuracies.index(best_acc)
@@ -221,10 +225,9 @@ test_svm(non_linear_clf, X_test, y_test)
 
 
 # %%
-gps_scaler = StandardScaler()
-gps_data = gps_scaler.fit_transform(df.iloc[:, [5, 6]])
-gps_data
-k_m = K_means(gps_data)
+# gps_scaler = StandardScaler()
+# gps_data = gps_scaler.fit_transform(df.iloc[:, [5, 6]])
+k_m = k_means.K_means(X)
 centroids = k_m.cluster(8)
 df["Cluster"] = k_m.closest
 
