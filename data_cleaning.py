@@ -56,4 +56,4 @@ df.dropna(inplace=True)
 # locations.to_csv("GPS_data.csv")
 
 # %%
-df.to_csv("cleaned_data.csv", index=False)
+df.to_csv("data/cleaned_data.csv", index=False)
